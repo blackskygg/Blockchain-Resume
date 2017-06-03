@@ -9,10 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/rand"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 )
@@ -20,6 +17,16 @@ import (
 type Recipient struct {
 	ID   string
 	Name string
+}
+
+type AddRecipientRequest struct {
+	Rp        Recipient
+	PubKeyPem string
+}
+
+type AddIssuerRequest struct {
+	Issuer    string
+	PubKeyPem string
 }
 
 type Cert struct {
@@ -57,61 +64,19 @@ func (t *Chaincode) Init(stub shim.ChaincodeStubInterface, function string, args
 	return []byte{}, nil
 }
 
-// Generate a new 1024-bit RSA key pair
-func newKeyPair() (rsa.PublicKey, rsa.PrivateKey) {
-	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-	prikey, _ := rsa.GenerateKey(r, 1024)
-	pubkey := prikey.Public()
-
-	return *pubkey.(*rsa.PublicKey), *prikey
+func addIssuer(stub shim.ChaincodeStubInterface, req AddIssuerRequest) {
+	issuer_id := fmt.Sprintf("%s##%s", "ISSUER_PUB", req.Issuer)
+	stub.PutState(issuer_id, []byte(req.PubKeyPem))
 }
 
-func keyPairToPem(pub rsa.PublicKey, priv rsa.PrivateKey) (string, string) {
-	priv_pem := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(&priv),
-	})
-	marshaled_pub, _ := x509.MarshalPKIXPublicKey(&pub)
-	pub_pem := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PUBLIC KEY",
-		Bytes: marshaled_pub,
-	})
-
-	return string(pub_pem), string(priv_pem)
-}
-
-func pemToKeyPair(pub_pem, priv_pem string) (rsa.PublicKey, rsa.PrivateKey) {
-	data, _ := pem.Decode([]byte(pub_pem))
-	pub, _ := x509.ParsePKIXPublicKey(data.Bytes)
-	data, _ = pem.Decode([]byte(priv_pem))
-	priv, _ := x509.ParsePKCS1PrivateKey(data.Bytes)
-
-	return *pub.(*rsa.PublicKey), *priv
-}
-
-func addIssuer(stub shim.ChaincodeStubInterface, issuer_name string) (string, string) {
-	pub, priv := newKeyPair()
-	pub_pem, priv_pem := keyPairToPem(pub, priv)
-
-	issuer_id := fmt.Sprintf("%s##%s", "ISSUER_PUB", issuer_name)
-	stub.PutState(issuer_id, []byte(pub_pem))
-
-	return pub_pem, priv_pem
-}
-
-func addRecipient(stub shim.ChaincodeStubInterface, rp Recipient) (string, string) {
-	pub, priv := newKeyPair()
-	pub_pem, priv_pem := keyPairToPem(pub, priv)
-
-	rp_id := fmt.Sprintf("%s##%s##%s", "RECIP_PUB", rp.Name, rp.ID)
-	rp_list_id := fmt.Sprintf("%s##%s##%s", "RECIP_LIST", rp.Name, rp.ID)
-	stub.PutState(rp_id, []byte(pub_pem))
+func addRecipient(stub shim.ChaincodeStubInterface, req AddRecipientRequest) {
+	rp_id := fmt.Sprintf("%s##%s##%s", "RECIP_PUB", req.Rp.Name, req.Rp.ID)
+	rp_list_id := fmt.Sprintf("%s##%s##%s", "RECIP_LIST", req.Rp.Name, req.Rp.ID)
+	stub.PutState(rp_id, []byte(req.PubKeyPem))
 
 	// Add an empty list to this uesr
 	empty, _ := json.Marshal(CertList{})
 	stub.PutState(rp_list_id, empty)
-
-	return pub_pem, priv_pem
 }
 
 func recipientToPub(stub shim.ChaincodeStubInterface, rp Recipient) (rsa.PublicKey, error) {
@@ -203,16 +168,11 @@ func (t *Chaincode) Invoke(stub shim.ChaincodeStubInterface, function string, ar
 			return []byte{}, errors.New("AddIssuer: Wrong #args!")
 		}
 
-		var issuer string
+		var issuer AddIssuerRequest
 		json.Unmarshal([]byte(args[0]), &issuer)
-		pub, priv := addIssuer(stub, issuer)
+		addIssuer(stub, issuer)
 
-		pub = strings.Replace(pub, "\n", "\\n", -1)
-		priv = strings.Replace(priv, "\n", "\\n", -1)
-		json_resp := fmt.Sprintf("{\"PubKey\": \"%s\", \"PrivKey\": \"%s\"}",
-			pub, priv)
-
-		return []byte(json_resp), nil
+		return []byte{}, nil
 
 	case "IssueCert":
 		if len(args) != 2 {
@@ -243,18 +203,13 @@ func (t *Chaincode) Invoke(stub shim.ChaincodeStubInterface, function string, ar
 			return []byte{}, errors.New("AddRecipient: Wrong #args!")
 		}
 
-		var rp Recipient
+		var rp AddRecipientRequest
 		if err := json.Unmarshal([]byte(args[0]), &rp); err != nil {
-			return []byte{}, errors.New("AddRecipient: Wrong Recipient Format!")
+			return []byte{}, errors.New(fmt.Sprint("AddRecipient: ", err))
 		}
-		pub, priv := addRecipient(stub, rp)
+		addRecipient(stub, rp)
 
-		pub = strings.Replace(pub, "\n", "\\n", -1)
-		priv = strings.Replace(priv, "\n", "\\n", -1)
-		json_resp := fmt.Sprintf("{\"PubKey\": \"%s\", \"PrivKey\": \"%s\"}",
-			pub, priv)
-
-		return []byte(json_resp), nil
+		return []byte{}, nil
 	case "ChangeVisibility":
 		if len(args) != 2 {
 			return []byte{}, errors.New("ChangeVisibility: Wrong #arg!")

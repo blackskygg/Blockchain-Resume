@@ -23,7 +23,10 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"math/rand"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 )
@@ -70,6 +73,28 @@ type KeyPair struct {
 	PrivKey string
 }
 
+// Generate a new 1024-bit RSA key pair
+func newKeyPair() (rsa.PublicKey, rsa.PrivateKey) {
+	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+	prikey, _ := rsa.GenerateKey(r, 1024)
+	pubkey := prikey.Public()
+
+	return *pubkey.(*rsa.PublicKey), *prikey
+}
+func keyPairToPem(pub rsa.PublicKey, priv rsa.PrivateKey) (string, string) {
+	priv_pem := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(&priv),
+	})
+	marshaled_pub, _ := x509.MarshalPKIXPublicKey(&pub)
+	pub_pem := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: marshaled_pub,
+	})
+
+	return string(pub_pem), string(priv_pem)
+}
+
 func TestChainCode_0(t *testing.T) {
 	scc := new(Chaincode)
 	stub := shim.NewMockStub("ex02", scc)
@@ -78,28 +103,28 @@ func TestChainCode_0(t *testing.T) {
 
 	checkState(t, stub, "#Counter#")
 
-	data, err := checkInvoke(t, stub, "AddRecipient", []string{`{"ID":"jj", "Name":"jj"}`})
-	kp := KeyPair{}
-	err = json.Unmarshal(data, &kp)
-	pb, _ := pem.Decode([]byte(kp.PrivKey))
-	RpPrivKey, _ := x509.ParsePKCS1PrivateKey(pb.Bytes)
+	RpPub, RpPriv := newKeyPair()
+	RpPubPem, _ := keyPairToPem(RpPub, RpPriv)
 
-	data, err = checkInvoke(t, stub, "AddIssuer", []string{"\"IssuerA\""})
-	kp = KeyPair{}
-	err = json.Unmarshal(data, &kp)
-	pb, _ = pem.Decode([]byte(kp.PrivKey))
-	PrivKey, _ := x509.ParsePKCS1PrivateKey(pb.Bytes)
+	RpPubPem = strings.Replace(RpPubPem, "\n", "\\n", -1)
+	data, err := checkInvoke(t, stub, "AddRecipient", []string{`{"Rp" : {"ID":"jj", "Name":"jj"}, "PubKeyPem": "` + RpPubPem + `"}`})
+
+	IsPub, IsPriv := newKeyPair()
+	IsPubPem, _ := keyPairToPem(IsPub, IsPriv)
+
+	IsPubPem = strings.Replace(IsPubPem, "\n", "\\n", -1)
+	data, err = checkInvoke(t, stub, "AddIssuer", []string{`{"Issuer":"IssuerA", "PubKeyPem": "` + IsPubPem + `"}`})
+
 	certJson := `{"Issuer":"IssuerA", "Link": "111", "Hash": "xxx", "Description": "jjj", "Recipient" : {"ID": "jj", "Name": "jj"}}`
 	hashed := sha256.Sum256([]byte(certJson))
-	signed, err := rsa.SignPKCS1v15(nil, PrivKey, crypto.SHA256, hashed[:])
+	signed, err := rsa.SignPKCS1v15(nil, &IsPriv, crypto.SHA256, hashed[:])
 	if err != nil {
 		fmt.Print(err)
 	}
+	checkInvoke(t, stub, "IssueCert", []string{certJson, string(signed)})
 
 	var cert_list []CertListResponseElem
-	checkInvoke(t, stub, "IssueCert", []string{certJson, string(signed)})
 	data, err = checkQuery(t, stub, "GetCertList", []string{`{"ID":"jj", "Name":"jj"}`})
-	data, err = rsa.DecryptPKCS1v15(nil, RpPrivKey, data)
 	if err != nil {
 		fmt.Print(err)
 	}
