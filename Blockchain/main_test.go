@@ -29,7 +29,7 @@ import (
 )
 
 func checkInit(t *testing.T, stub *shim.MockStub, args []string) {
-	_, err := stub.MockInit("", "", args)
+	_, err := stub.MockInit("1", "Init", args)
 	if err != nil {
 		fmt.Println("Init failed", err)
 		t.FailNow()
@@ -45,20 +45,13 @@ func checkState(t *testing.T, stub *shim.MockStub, name string) {
 	t.Log("State value", name, "is", string(bytes))
 }
 
-func checkQuery(t *testing.T, stub *shim.MockStub, name string, value string) {
-	bytes, err := stub.MockQuery("query", []string{name})
+func checkQuery(t *testing.T, stub *shim.MockStub, function string, args []string) ([]byte, error) {
+	bytes, err := stub.MockQuery(function, args)
 	if err != nil {
-		fmt.Println("Query", name, "failed", err)
+		fmt.Println("Query failed!", err)
 		t.FailNow()
 	}
-	if bytes == nil {
-		fmt.Println("Query", name, "failed to get value")
-		t.FailNow()
-	}
-	if string(bytes) != value {
-		fmt.Println("Query value", name, "was not", value, "as expected")
-		t.FailNow()
-	}
+	return bytes, err
 }
 
 func checkInvoke(t *testing.T, stub *shim.MockStub, function string, args []string) ([]byte, error) {
@@ -83,16 +76,18 @@ func TestChainCode_0(t *testing.T) {
 
 	checkInit(t, stub, []string{})
 
-	checkInvoke(t, stub, "Init", []string{""})
-
 	checkState(t, stub, "#Counter#")
 
-	checkInvoke(t, stub, "AddRecipient", []string{`{"ID":"jj", "Name":"jj"}`})
-
-	data, err := checkInvoke(t, stub, "AddIssuer", []string{"\"IssuerA\""})
+	data, err := checkInvoke(t, stub, "AddRecipient", []string{`{"ID":"jj", "Name":"jj"}`})
 	kp := KeyPair{}
 	err = json.Unmarshal(data, &kp)
 	pb, _ := pem.Decode([]byte(kp.PrivKey))
+	RpPrivKey, _ := x509.ParsePKCS1PrivateKey(pb.Bytes)
+
+	data, err = checkInvoke(t, stub, "AddIssuer", []string{"\"IssuerA\""})
+	kp = KeyPair{}
+	err = json.Unmarshal(data, &kp)
+	pb, _ = pem.Decode([]byte(kp.PrivKey))
 	PrivKey, _ := x509.ParsePKCS1PrivateKey(pb.Bytes)
 	certJson := `{"Issuer":"IssuerA", "Link": "111", "Hash": "xxx", "Description": "jjj", "Recipient" : {"ID": "jj", "Name": "jj"}}`
 	hashed := sha256.Sum256([]byte(certJson))
@@ -101,7 +96,18 @@ func TestChainCode_0(t *testing.T) {
 		fmt.Print(err)
 	}
 
+	var cert_list []CertListResponseElem
 	checkInvoke(t, stub, "IssueCert", []string{certJson, string(signed)})
+	data, err = checkQuery(t, stub, "GetCertList", []string{`{"ID":"jj", "Name":"jj"}`})
+	data, err = rsa.DecryptPKCS1v15(nil, RpPrivKey, data)
+	if err != nil {
+		fmt.Print(err)
+	}
+	err = json.Unmarshal(data, &cert_list)
+	if err != nil {
+		fmt.Print(err)
+	}
+	fmt.Print(cert_list)
 
 	t.FailNow()
 }

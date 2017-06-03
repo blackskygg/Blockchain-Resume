@@ -44,7 +44,7 @@ type CertListResponseElem struct {
 type CertList []CertListElem
 
 type ChangeVisibilityRequest struct {
-	rp      Recipient
+	Rp      Recipient
 	CertID  string
 	Visible bool
 }
@@ -53,6 +53,7 @@ type Chaincode struct {
 }
 
 func (t *Chaincode) Init(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
+	stub.PutState("#Counter#", []byte{0})
 	return []byte{}, nil
 }
 
@@ -197,9 +198,6 @@ func getFullCertListByRecipient(stub shim.ChaincodeStubInterface, rp Recipient) 
 
 func (t *Chaincode) Invoke(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
 	switch function {
-	case "Init":
-		stub.PutState("#Counter#", []byte{0})
-		return []byte{}, nil
 	case "AddIssuer":
 		if len(args) != 1 {
 			return []byte{}, errors.New("AddIssuer: Wrong #args!")
@@ -268,7 +266,7 @@ func (t *Chaincode) Invoke(stub shim.ChaincodeStubInterface, function string, ar
 		}
 
 		hashed := sha256.Sum256([]byte(args[0]))
-		pubkey, err := recipientToPub(stub, req.rp)
+		pubkey, err := recipientToPub(stub, req.Rp)
 		if err != nil {
 			return []byte{}, errors.New("ChangeVisibility: No such recipient!")
 		}
@@ -291,20 +289,22 @@ func (t *Chaincode) Query(stub shim.ChaincodeStubInterface, function string, arg
 			return []byte{}, errors.New("GetCertList: Wrong #args!")
 		}
 
-		//
+		// Encrypt the returned data
 		var rp Recipient
 		if err := json.Unmarshal([]byte(args[0]), &rp); err != nil {
 			return []byte{}, errors.New("GetCertList: Wrong Recipient Format!")
 		}
-		pubkey, err := recipientToPub(stub, rp)
-		if err != nil {
-			return []byte{}, errors.New("GetCertList: No such recipient!")
-		}
+		//		pubkey, err := recipientToPub(stub, rp)
+		//		if err != nil {
+		//			return []byte{}, errors.New("GetCertList: No such recipient!")
+		//		}
 
 		full_cert_list := getFullCertListByRecipient(stub, rp)
 		raw_json, _ := json.Marshal(full_cert_list)
-		encrpyted_json, err := rsa.EncryptPKCS1v15(nil, &pubkey, raw_json)
-		return encrpyted_json, nil
+		return raw_json, nil
+		//		encrpyted_json, err := rsa.EncryptPKCS1v15(nil, &pubkey, raw_json)
+
+		//		return encrpyted_json, err
 	default:
 		return []byte{}, errors.New("Invalid Function Name")
 	}
