@@ -1,187 +1,318 @@
-/*
-Copyright IBM Corp. 2016 All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package main
 
-//WARNING - this chaincode's ID is hard-coded in chaincode_example04 to illustrate one way of
-//calling chaincode from a chaincode. If this example is modified, chaincode_example04.go has
-//to be modified as well with the new ID of chaincode_example02.
-//chaincode_example05 show's how chaincode ID can be passed in as a parameter instead of
-//hard-coding.
-
 import (
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 )
 
-// SimpleChaincode example simple Chaincode implementation
-type SimpleChaincode struct {
+type Recipient struct {
+	ID   string
+	Name string
 }
 
-func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
-	var A, B string    // Entities
-	var Aval, Bval int // Asset holdings
-	var err error
-
-	if len(args) != 4 {
-		return nil, errors.New("Incorrect number of arguments. Expecting 4")
-	}
-
-	// Initialize the chaincode
-	A = args[0]
-	Aval, err = strconv.Atoi(args[1])
-	if err != nil {
-		return nil, errors.New("Expecting integer value for asset holding")
-	}
-	B = args[2]
-	Bval, err = strconv.Atoi(args[3])
-	if err != nil {
-		return nil, errors.New("Expecting integer value for asset holding")
-	}
-	fmt.Printf("Aval = %d, Bval = %d\n", Aval, Bval)
-
-	// Write the state to the ledger
-	err = stub.PutState(A, []byte(strconv.Itoa(Aval)))
-	if err != nil {
-		return nil, err
-	}
-
-	err = stub.PutState(B, []byte(strconv.Itoa(Bval)))
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, nil
+type Cert struct {
+	Issuer      string
+	Link        string
+	Hash        string
+	Description string
+	Recipient   Recipient
 }
 
-// Transaction makes payment of X units from A to B
-func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
-	if function == "delete" {
-		// Deletes an entity from its state
-		return t.delete(stub, args)
-	}
-
-	var A, B string    // Entities
-	var Aval, Bval int // Asset holdings
-	var X int          // Transaction value
-	var err error
-
-	if len(args) != 3 {
-		return nil, errors.New("Incorrect number of arguments. Expecting 3")
-	}
-
-	A = args[0]
-	B = args[1]
-
-	// Get the state from the ledger
-	// TODO: will be nice to have a GetAllState call to ledger
-	Avalbytes, err := stub.GetState(A)
-	if err != nil {
-		return nil, errors.New("Failed to get state")
-	}
-	if Avalbytes == nil {
-		return nil, errors.New("Entity not found")
-	}
-	Aval, _ = strconv.Atoi(string(Avalbytes))
-
-	Bvalbytes, err := stub.GetState(B)
-	if err != nil {
-		return nil, errors.New("Failed to get state")
-	}
-	if Bvalbytes == nil {
-		return nil, errors.New("Entity not found")
-	}
-	Bval, _ = strconv.Atoi(string(Bvalbytes))
-
-	// Perform the execution
-	X, err = strconv.Atoi(args[2])
-	if err != nil {
-		return nil, errors.New("Invalid transaction amount, expecting a integer value")
-	}
-	Aval = Aval - X
-	Bval = Bval + X
-	fmt.Printf("Aval = %d, Bval = %d\n", Aval, Bval)
-
-	// Write the state back to the ledger
-	err = stub.PutState(A, []byte(strconv.Itoa(Aval)))
-	if err != nil {
-		return nil, err
-	}
-
-	err = stub.PutState(B, []byte(strconv.Itoa(Bval)))
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, nil
+type CertListElem struct {
+	CertID  string
+	Visible bool
 }
 
-// Deletes an entity from state
-func (t *SimpleChaincode) delete(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
-	if len(args) != 1 {
-		return nil, errors.New("Incorrect number of arguments. Expecting 1")
+type CertListResponseElem struct {
+	CertID  string
+	Cert    Cert
+	Visible bool
+}
+
+type CertList []CertListElem
+
+type ChangeVisibilityRequest struct {
+	rp      Recipient
+	CertID  string
+	Visible bool
+}
+
+type Chaincode struct {
+}
+
+func (t *Chaincode) Init(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
+	return []byte{}, nil
+}
+
+// Generate a new 1024-bit RSA key pair
+func newKeyPair() (rsa.PublicKey, rsa.PrivateKey) {
+	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+	prikey, _ := rsa.GenerateKey(r, 1024)
+	pubkey := prikey.Public()
+
+	return *pubkey.(*rsa.PublicKey), *prikey
+}
+
+func keyPairToPem(pub rsa.PublicKey, priv rsa.PrivateKey) (string, string) {
+	priv_pem := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(&priv),
+	})
+	marshaled_pub, _ := x509.MarshalPKIXPublicKey(&pub)
+	pub_pem := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: marshaled_pub,
+	})
+
+	return string(pub_pem), string(priv_pem)
+}
+
+func pemToKeyPair(pub_pem, priv_pem string) (rsa.PublicKey, rsa.PrivateKey) {
+	data, _ := pem.Decode([]byte(pub_pem))
+	pub, _ := x509.ParsePKIXPublicKey(data.Bytes)
+	data, _ = pem.Decode([]byte(priv_pem))
+	priv, _ := x509.ParsePKCS1PrivateKey(data.Bytes)
+
+	return *pub.(*rsa.PublicKey), *priv
+}
+
+func addIssuer(stub shim.ChaincodeStubInterface, issuer_name string) (string, string) {
+	pub, priv := newKeyPair()
+	pub_pem, priv_pem := keyPairToPem(pub, priv)
+
+	issuer_id := fmt.Sprintf("%s##%s", "ISSUER_PUB", issuer_name)
+	stub.PutState(issuer_id, []byte(pub_pem))
+
+	return pub_pem, priv_pem
+}
+
+func addRecipient(stub shim.ChaincodeStubInterface, rp Recipient) (string, string) {
+	pub, priv := newKeyPair()
+	pub_pem, priv_pem := keyPairToPem(pub, priv)
+
+	rp_id := fmt.Sprintf("%s##%s##%s", "RECIP_PUB", rp.Name, rp.ID)
+	rp_list_id := fmt.Sprintf("%s##%s##%s", "RECIP_LIST", rp.Name, rp.ID)
+	stub.PutState(rp_id, []byte(pub_pem))
+
+	// Add an empty list to this uesr
+	empty, _ := json.Marshal(CertList{})
+	stub.PutState(rp_list_id, empty)
+
+	return pub_pem, priv_pem
+}
+
+func recipientToPub(stub shim.ChaincodeStubInterface, rp Recipient) (rsa.PublicKey, error) {
+	rp_id := fmt.Sprintf("%s##%s##%s", "RECIP_PUB", rp.Name, rp.ID)
+	pub_pem, err := stub.GetState(rp_id)
+	data, _ := pem.Decode([]byte(pub_pem))
+	pub, _ := x509.ParsePKIXPublicKey(data.Bytes)
+
+	return *pub.(*rsa.PublicKey), err
+}
+
+func issuerToPub(stub shim.ChaincodeStubInterface, issuer string) (rsa.PublicKey, error) {
+	issuer_id := fmt.Sprintf("%s##%s", "ISSUER_PUB", issuer)
+	pub_pem, err := stub.GetState(issuer_id)
+	data, _ := pem.Decode([]byte(pub_pem))
+	pub, _ := x509.ParsePKIXPublicKey(data.Bytes)
+
+	return *pub.(*rsa.PublicKey), err
+}
+
+func idToCert(stub shim.ChaincodeStubInterface, ID string) (Cert, error) {
+	cert_ID_id := fmt.Sprintf("%s##%s", "CERT", ID)
+	data, err := stub.GetState(cert_ID_id)
+	cert := Cert{}
+	json.Unmarshal(data, &cert)
+
+	return cert, err
+}
+
+func issueCert(stub shim.ChaincodeStubInterface, cert Cert) string {
+	data, _ := json.Marshal(cert)
+	cnt, _ := stub.GetState("#Counter#")
+	curr_ID, _ := strconv.Atoi(string(cnt))
+	cert_ID := fmt.Sprintf("%016x", curr_ID)
+	cert_ID_id := fmt.Sprintf("%s##%s", "CERT", cert_ID)
+
+	stub.PutState(cert_ID_id, data)
+	addCertToRecipient(stub, cert.Recipient, cert_ID)
+
+	return cert_ID
+}
+
+func getCertListByRecipient(stub shim.ChaincodeStubInterface, rp Recipient) CertList {
+	var cert_list CertList
+	rp_list_id := fmt.Sprintf("%s##%s##%s", "RECIP_LIST", rp.Name, rp.ID)
+	old_json, _ := stub.GetState(rp_list_id)
+	json.Unmarshal(old_json, &cert_list)
+
+	return cert_list
+}
+
+func addCertToRecipient(stub shim.ChaincodeStubInterface, rp Recipient, cert_ID string) {
+	rp_list_id := fmt.Sprintf("%s##%s##%s", "RECIP_LIST", rp.Name, rp.ID)
+	cert_list := getCertListByRecipient(stub, rp)
+	cert_list = append(cert_list, CertListElem{cert_ID, false})
+	new_json, _ := json.Marshal(cert_list)
+	stub.PutState(rp_list_id, new_json)
+}
+
+func changeCertListElemVisibility(stub shim.ChaincodeStubInterface, rp Recipient, ID string, visible bool) {
+	cert_list := getCertListByRecipient(stub, rp)
+	for _, v := range cert_list {
+		if v.CertID == ID {
+			v.Visible = visible
+		}
+	}
+}
+
+func getFullCertListByRecipient(stub shim.ChaincodeStubInterface, rp Recipient) []CertListResponseElem {
+	var full_cert_list []CertListResponseElem
+	cert_list := getCertListByRecipient(stub, rp)
+	for _, v := range cert_list {
+		cert, _ := idToCert(stub, v.CertID)
+		full_cert_list = append(full_cert_list, CertListResponseElem{
+			CertID:  v.CertID,
+			Cert:    cert,
+			Visible: v.Visible,
+		})
+
 	}
 
-	A := args[0]
+	return full_cert_list
+}
 
-	// Delete the key from the state in ledger
-	err := stub.DelState(A)
-	if err != nil {
-		return nil, errors.New("Failed to delete state")
+func (t *Chaincode) Invoke(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
+	switch function {
+	case "Init":
+		stub.PutState("#Counter#", []byte{0})
+		return []byte{}, nil
+	case "AddIssuer":
+		if len(args) != 1 {
+			return []byte{}, errors.New("AddIssuer: Wrong #args!")
+		}
+
+		var issuer string
+		json.Unmarshal([]byte(args[0]), &issuer)
+		pub, priv := addIssuer(stub, issuer)
+
+		pub = strings.Replace(pub, "\n", "\\n", -1)
+		priv = strings.Replace(priv, "\n", "\\n", -1)
+		json_resp := fmt.Sprintf("{\"PubKey\": \"%s\", \"PrivKey\": \"%s\"}",
+			pub, priv)
+
+		return []byte(json_resp), nil
+
+	case "IssueCert":
+		if len(args) != 2 {
+			return []byte{}, errors.New("IssueCert: Wrong #args!")
+		}
+
+		// Verify the cert using the public key of issuer
+		var cert Cert
+		if err := json.Unmarshal([]byte(args[0]), &cert); err != nil {
+			return []byte{}, errors.New("IssueCert: Wrong cert Format!")
+		}
+		pubkey, err := issuerToPub(stub, cert.Issuer)
+		if err != nil {
+			return []byte{}, errors.New("IssueCert: No such issuer!")
+		}
+
+		hashed := sha256.Sum256([]byte(args[0]))
+		if err := rsa.VerifyPKCS1v15(&pubkey, crypto.SHA256, hashed[:], []byte(args[1])); err != nil {
+			return []byte{}, errors.New("IssueCert: Integrity check failed!")
+		}
+
+		cert_id := issueCert(stub, cert)
+		json_resp := fmt.Sprintf("{\"ID\": \"%s\"}", cert_id)
+		return []byte(json_resp), nil
+
+	case "AddRecipient":
+		if len(args) != 1 {
+			return []byte{}, errors.New("AddRecipient: Wrong #args!")
+		}
+
+		var rp Recipient
+		if err := json.Unmarshal([]byte(args[0]), &rp); err != nil {
+			return []byte{}, errors.New("AddRecipient: Wrong Recipient Format!")
+		}
+		pub, priv := addRecipient(stub, rp)
+
+		pub = strings.Replace(pub, "\n", "\\n", -1)
+		priv = strings.Replace(priv, "\n", "\\n", -1)
+		json_resp := fmt.Sprintf("{\"PubKey\": \"%s\", \"PrivKey\": \"%s\"}",
+			pub, priv)
+
+		return []byte(json_resp), nil
+	case "ChangeVisibility":
+		if len(args) != 2 {
+			return []byte{}, errors.New("ChangeVisibility: Wrong #arg!")
+		}
+
+		var req ChangeVisibilityRequest
+		if err := json.Unmarshal([]byte(args[0]), &req); err != nil {
+			return []byte{}, errors.New("ChangeVisibility: Wrong #args!")
+		}
+
+		hashed := sha256.Sum256([]byte(args[0]))
+		pubkey, err := recipientToPub(stub, req.rp)
+		if err != nil {
+			return []byte{}, errors.New("ChangeVisibility: No such recipient!")
+		}
+		if err := rsa.VerifyPKCS1v15(&pubkey, crypto.SHA256, hashed[:], []byte(args[1])); err != nil {
+			return []byte{}, errors.New("ChangeVisibility: Integrity check failed!")
+		}
+
+		return []byte{}, nil
+	default:
+		return []byte{}, errors.New("Invalid FunctionName")
 	}
 
-	return nil, nil
 }
 
 // Query callback representing the query of a chaincode
-func (t *SimpleChaincode) Query(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
-	if function != "query" {
-		return nil, errors.New("Invalid query function name. Expecting \"query\"")
+func (t *Chaincode) Query(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
+	switch function {
+	case "GetCertList":
+		if len(args) != 1 {
+			return []byte{}, errors.New("GetCertList: Wrong #args!")
+		}
+
+		//
+		var rp Recipient
+		if err := json.Unmarshal([]byte(args[0]), &rp); err != nil {
+			return []byte{}, errors.New("GetCertList: Wrong Recipient Format!")
+		}
+		pubkey, err := recipientToPub(stub, rp)
+		if err != nil {
+			return []byte{}, errors.New("GetCertList: No such recipient!")
+		}
+
+		full_cert_list := getFullCertListByRecipient(stub, rp)
+		raw_json, _ := json.Marshal(full_cert_list)
+		encrpyted_json, err := rsa.EncryptPKCS1v15(nil, &pubkey, raw_json)
+		return encrpyted_json, nil
+	default:
+		return []byte{}, errors.New("Invalid Function Name")
 	}
-	var A string // Entities
-	var err error
 
-	if len(args) != 1 {
-		return nil, errors.New("Incorrect number of arguments. Expecting name of the person to query")
-	}
-
-	A = args[0]
-
-	// Get the state from the ledger
-	Avalbytes, err := stub.GetState(A)
-	if err != nil {
-		jsonResp := "{\"Error\":\"Failed to get state for " + A + "\"}"
-		return nil, errors.New(jsonResp)
-	}
-
-	if Avalbytes == nil {
-		jsonResp := "{\"Error\":\"Nil amount for " + A + "\"}"
-		return nil, errors.New(jsonResp)
-	}
-
-	jsonResp := "{\"Name\":\"" + A + "\",\"Amount\":\"" + string(Avalbytes) + "\"}"
-	fmt.Printf("Query Response:%s\n", jsonResp)
-	return Avalbytes, nil
 }
 
 func main() {
-	err := shim.Start(new(SimpleChaincode))
+	err := shim.Start(new(Chaincode))
 	if err != nil {
 		fmt.Printf("Error starting Simple chaincode: %s", err)
 	}

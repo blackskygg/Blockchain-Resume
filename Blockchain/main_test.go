@@ -16,6 +16,12 @@ limitations under the License.
 package main
 
 import (
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"testing"
 
@@ -23,23 +29,20 @@ import (
 )
 
 func checkInit(t *testing.T, stub *shim.MockStub, args []string) {
-	_, err := stub.MockInit("1", "init", args)
+	_, err := stub.MockInit("", "", args)
 	if err != nil {
 		fmt.Println("Init failed", err)
 		t.FailNow()
 	}
 }
 
-func checkState(t *testing.T, stub *shim.MockStub, name string, value string) {
+func checkState(t *testing.T, stub *shim.MockStub, name string) {
 	bytes := stub.State[name]
 	if bytes == nil {
 		fmt.Println("State", name, "failed to get value")
 		t.FailNow()
 	}
-	if string(bytes) != value {
-		fmt.Println("State value", name, "was not", value, "as expected")
-		t.FailNow()
-	}
+	t.Log("State value", name, "is", string(bytes))
 }
 
 func checkQuery(t *testing.T, stub *shim.MockStub, name string, value string) {
@@ -58,55 +61,47 @@ func checkQuery(t *testing.T, stub *shim.MockStub, name string, value string) {
 	}
 }
 
-func checkInvoke(t *testing.T, stub *shim.MockStub, args []string) {
-	_, err := stub.MockInvoke("1", "query", args)
+func checkInvoke(t *testing.T, stub *shim.MockStub, function string, args []string) ([]byte, error) {
+	ret, err := stub.MockInvoke("1", function, args)
 	if err != nil {
 		fmt.Println("Invoke", args, "failed", err)
 		t.FailNow()
 	}
+	fmt.Print(string(ret))
+
+	return ret, err
 }
 
-func TestExample02_Init(t *testing.T) {
-	scc := new(SimpleChaincode)
-	stub := shim.NewMockStub("ex02", scc)
-
-	// Init A=123 B=234
-	checkInit(t, stub, []string{"A", "123", "B", "234"})
-
-	checkState(t, stub, "A", "123")
-	checkState(t, stub, "B", "234")
+type KeyPair struct {
+	PubKey  string
+	PrivKey string
 }
 
-func TestExample02_Query(t *testing.T) {
-	scc := new(SimpleChaincode)
+func TestChainCode_0(t *testing.T) {
+	scc := new(Chaincode)
 	stub := shim.NewMockStub("ex02", scc)
 
-	// Init A=345 B=456
-	checkInit(t, stub, []string{"A", "345", "B", "456"})
+	checkInit(t, stub, []string{})
 
-	// Query A
-	checkQuery(t, stub, "A", "345")
+	checkInvoke(t, stub, "Init", []string{""})
 
-	// Query B
-	checkQuery(t, stub, "B", "456")
-}
+	checkState(t, stub, "#Counter#")
 
-func TestExample02_Invoke(t *testing.T) {
-	scc := new(SimpleChaincode)
-	stub := shim.NewMockStub("ex02", scc)
+	checkInvoke(t, stub, "AddRecipient", []string{`{"ID":"jj", "Name":"jj"}`})
 
-	// Init A=567 B=678
-	checkInit(t, stub, []string{"A", "567", "B", "678"})
+	data, err := checkInvoke(t, stub, "AddIssuer", []string{"\"IssuerA\""})
+	kp := KeyPair{}
+	err = json.Unmarshal(data, &kp)
+	pb, _ := pem.Decode([]byte(kp.PrivKey))
+	PrivKey, _ := x509.ParsePKCS1PrivateKey(pb.Bytes)
+	certJson := `{"Issuer":"IssuerA", "Link": "111", "Hash": "xxx", "Description": "jjj", "Recipient" : {"ID": "jj", "Name": "jj"}}`
+	hashed := sha256.Sum256([]byte(certJson))
+	signed, err := rsa.SignPKCS1v15(nil, PrivKey, crypto.SHA256, hashed[:])
+	if err != nil {
+		fmt.Print(err)
+	}
 
-	// Invoke A->B for 123
-	checkInvoke(t, stub, []string{"A", "B", "123"})
-	checkQuery(t, stub, "A", "444")
-	checkQuery(t, stub, "B", "801")
+	checkInvoke(t, stub, "IssueCert", []string{certJson, string(signed)})
 
-	// Invoke B->A for 234
-	checkInvoke(t, stub, []string{"B", "A", "234"})
-	checkQuery(t, stub, "A", "678")
-	checkQuery(t, stub, "B", "567")
-	checkState(t, stub, "A", "678")
-	checkState(t, stub, "B", "567")
+	t.FailNow()
 }
