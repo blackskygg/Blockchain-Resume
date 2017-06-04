@@ -1,0 +1,165 @@
+body {
+    margin:0;
+    padding:0;
+}
+.header{
+    height: 60px;
+    width: 100%;
+    background-color: #0080ff;
+}
+.left{
+    height:60px;
+    font-size: 40px;
+    line-height: 60px;
+    float: left;
+    text-align: center;
+    margin: auto 0 auto 0;
+    color: white;
+}
+.container{
+    height: 100%;
+    position: absolute;
+    width: 100%;
+    text-align: center;
+}
+.resume{
+    width:70%;
+    margin: 0 auto ;
+    height: 100%;
+    background-color: inherit;
+    text-align: center;
+    padding: 60px 0;
+}
+.avatar{
+    width: 120px;
+    height: 120px;
+    border-radius: 70px;
+    margin: 0 auto;
+    background-image: url("img/untitled.png");
+    background-size: 100% 100%;
+    border-color: #0080ff;
+    border-width: 2px;
+    border-style: solid;
+}
+table{
+    width: 700px;
+    margin: 0 auto;
+    border-color: white;
+    height: auto;
+}
+tr td{
+    height: 40px;
+    line-height:40px;
+    font-size: 30px;
+    border: 0 ;
+}
+.visible{
+    width: 40px;
+    text-align: center;
+    background-image: url("img/眼睛.png");
+    background-size: 100% 100%;
+}
+.unvisible{
+    width: 40px;
+    text-align: center;
+    background-image: url("img/眼睛闭.png");
+    background-size: 100% 100%;
+}
+.description{
+    width: 500px;
+    text-align: center;
+}
+.content{
+    width: 160px;
+    text-align: center;
+}
+.name{
+    width: 120px;
+    height: 40px;
+    line-height:40px;
+    margin: 20px auto;
+    font-size: 40px;
+}
+.big-image{
+    width: 100%;
+    margin: 0 auto;
+    height: calc(100% - 180px);
+    background-image: url("img/1.png");
+    background-size: 100% 100%;
+}
+.personal{
+    float: left;
+    width: 200px;
+    height: 60px;
+    border: 1px solid #0080ff;
+    margin-left: 300px;
+    margin-top: 30px;
+    background: url("img/2.png");
+    background-size: 100% 100%;
+}
+.personal:hover{
+    border: 2px solid #0080ff;
+}
+.issuer:hover{
+    border: 2px solid #0080ff;
+}
+.issuer{
+    float: right;
+    width: 200px;
+    height: 60px;
+    border: 1px solid #0080ff;
+    margin-top: 30px;
+    margin-right: 300px;
+    background: url("img/3.png");
+    background-size: 100% 100%;
+}
+.certsContainer{
+    height: 70px;
+    width: 500px;
+    position: relative;
+    margin: 0 auto;
+    padding: 25px;
+}
+.label{
+    height: 25px;
+    margin-top: 0;
+    margin-left: 0;
+    line-height: 25px;
+    font-size: 18px;
+    color: #0080ff;
+}
+.textInput{
+    height: 40px;
+    margin-top: 5px;
+    margin-left: 0;
+    padding: 3px;
+    font-size: 30px;
+    background-color: rgb(200, 200, 200);
+    width: 400px;
+}
+.input-file{
+    margin-left: 0;
+    margin-top: auto;
+    margin-bottom: auto;
+}
+.submit{
+    width: 400px;
+    height: 50px;
+    background-color: #0080ff;
+    line-height: 60px;
+    font-size: 40px;
+    font-weight: bold;
+    margin-left: 0 ;
+    margin-top: -50px;
+    text-align: center;
+    color: white;
+}
+.share{
+    height: 50px;
+    width: 150px;
+    background-color: #0080ff;
+    margin: 10px auto;
+    line-height: 50px;
+    font-size: 30px;
+    font-weight: bold;
+}

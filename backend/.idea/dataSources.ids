@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component name="dataSourceStorage">
+  <data-source name="MySQL - BlockChainResume@139.198.15.91" uuid="5930c3f3-075d-404b-871e-8a6909c3bb8a">
+    <database-info product="MySQL" version="5.7.18" jdbc-version="4.0" driver-name="MySQL Connector Java" driver-version="mysql-connector-java-5.1.40 ( Revision: 402933ef52cad9aa82624e80acbea46e3a701ce6 )">
+      <extra-name-characters>#@</extra-name-characters>
+      <identifier-quote-string>`</identifier-quote-string>
+    </database-info>
+    <case-sensitivity plain-identifiers="exact" quoted-identifiers="exact"/>
+    <database-model serializer="dbm" rdbms="MYSQL" format-version="2.5">
+      <schema id="1" name="BlockChainResume"/>
+      <table id="2" parent="1" name="company"/>
+      <table id="3" parent="1" name="user"/>
+      <column id="4" parent="2" name="uid">
+        <mandatory>1</mandatory>
+        <data-type>char(32)</data-type>
+      </column>
+      <column id="5" parent="2" name="companyName">
+        <mandatory>1</mandatory>
+        <data-type>varchar(50)</data-type>
+      </column>
+      <column id="6" parent="2" name="password">
+        <mandatory>1</mandatory>
+        <data-type>varchar(100)</data-type>
+      </column>
+      <column id="7" parent="2" name="is_certified">
+        <data-type>tinyint(1)</data-type>
+      </column>
+      <column id="8" parent="2" name="public_key">
+        <data-type>varchar(1024)</data-type>
+      </column>
+      <column id="9" parent="2" name="private_key">
+        <data-type>varchar(1024)</data-type>
+      </column>
+      <key id="10" parent="2" name="PRIMARY">
+        <columns>uid</columns>
+        <primary>1</primary>
+      </key>
+      <column id="11" parent="3" name="uid">
+        <mandatory>1</mandatory>
+        <data-type>char(32)</data-type>
+      </column>
+      <column id="12" parent="3" name="password">
+        <data-type>varchar(100)</data-type>
+      </column>
+      <column id="13" parent="3" name="realname">
+        <mandatory>1</mandatory>
+        <data-type>varchar(100)</data-type>
+      </column>
+      <column id="14" parent="3" name="identityNum">
+        <mandatory>1</mandatory>
+        <data-type>varchar(50)</data-type>
+      </column>
+      <column id="15" parent="3" name="publicKey">
+        <mandatory>1</mandatory>
+        <data-type>varchar(1024)</data-type>
+      </column>
+      <column id="16" parent="3" name="privateKey">
+        <mandatory>1</mandatory>
+        <data-type>varchar(1024)</data-type>
+      </column>
+      <key id="17" parent="3" name="PRIMARY">
+        <columns>uid</columns>
+        <primary>1</primary>
+      </key>
+    </database-model>
+  </data-source>
+</component>
