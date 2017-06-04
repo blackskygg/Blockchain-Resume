@@ -175,25 +175,28 @@ func (t *Chaincode) Invoke(stub shim.ChaincodeStubInterface, function string, ar
 		return []byte{}, nil
 
 	case "IssueCert":
-		if len(args) != 2 {
-			return []byte{}, errors.New("IssueCert: Wrong #args!")
-		}
+		/*
+			if len(args) != 2 {
+				return []byte{}, errors.New("IssueCert: Wrong #args!")
+			}
+		*/
 
 		// Verify the cert using the public key of issuer
 		var cert Cert
 		if err := json.Unmarshal([]byte(args[0]), &cert); err != nil {
 			return []byte{}, errors.New("IssueCert: Wrong cert Format!")
 		}
-		pubkey, err := issuerToPub(stub, cert.Issuer)
-		if err != nil {
-			return []byte{}, errors.New("IssueCert: No such issuer!")
-		}
+		/*		pubkey, err := issuerToPub(stub, cert.Issuer)
+				if err != nil {
+					return []byte{}, errors.New("IssueCert: No such issuer!")
+				}
 
-		hashed := sha256.Sum256([]byte(args[0]))
-		if err := rsa.VerifyPKCS1v15(&pubkey, crypto.SHA256, hashed[:], []byte(args[1])); err != nil {
-			return []byte{}, errors.New("IssueCert: Integrity check failed!")
-		}
+				hashed := sha256.Sum256([]byte(args[0]))
 
+				if err := rsa.VerifyPKCS1v15(&pubkey, crypto.SHA256, hashed[:], []byte(args[1])); err != nil {
+					return []byte{}, errors.New("IssueCert: Integrity check failed!")
+				}
+		*/
 		cert_id := issueCert(stub, cert)
 		json_resp := fmt.Sprintf("{\"ID\": \"%s\"}", cert_id)
 		return []byte(json_resp), nil
